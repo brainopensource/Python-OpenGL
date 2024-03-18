@@ -4,26 +4,25 @@ from math import sin, cos, radians
 
 class Camera:
     def __init__(self):
-        self.camera_pos = Vector3([-20.0, 10.0, 0.0])
+        self.camera_pos = Vector3([0.0, 1.0, 0.0])
         self.camera_front = Vector3([0.0, 0.0, -1.0])
         self.camera_up = Vector3([0.0, 1.0, 0.0])
         self.camera_right = Vector3([1.0, 0.0, 0.0])
         self.dive = Vector3([0.0, 1.0, 0.0])
-
         self.mouse_sense = 0.1
         self.yaw = -90
-        self.pitch = 0
+        self.pitch = -30
 
 
     def get_view_matrix(self):
         return matrix44.create_look_at(self.camera_pos, self.camera_pos + self.camera_front, self.camera_up)
+
 
     def process_mouse_movements(self, x, y, lock_pitch=False):
         x *= self.mouse_sense
         y *= self.mouse_sense
         self.yaw += x
         self.pitch += y
-
         if lock_pitch:
             self.pitch = max(min(self.pitch, 90), -90)
         self.update_camera_vectors()
@@ -38,7 +37,7 @@ class Camera:
         self.camera_right = vector.normalize(vector3.cross(self.camera_front, Vector3([0.0, 1.0, 0.0])))
         self.camera_up = vector.normalize(vector3.cross(self.camera_right, self.camera_front))
 
-    # Camera method for the WASD movement
+
     def process_keyboard(self, direction, velocity):
         if direction == "FORWARD":
             self.camera_pos += self.camera_front * velocity
@@ -52,4 +51,4 @@ class Camera:
             self.camera_pos += self.dive * velocity
         if direction == "DOWN":
             self.camera_pos -= self.dive * velocity
-        print([round(x,2) for x in self.camera_pos])
+

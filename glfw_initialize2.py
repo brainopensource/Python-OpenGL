@@ -1,13 +1,14 @@
 import glfw
 from utils import *
 from OpenGL.GL import (glUniformMatrix4fv, GL_FALSE, glEnable, glPolygonMode, GL_DEPTH_TEST, GL_FRONT_AND_BACK, GL_LINE,
-                       GL_FRONT)
+                       GL_FRONT, glViewport)
 
 
 
 RESOLUTION = [1420, 800]
 MONITOR_1_RESOLUTION = [1920, 1080]
 REFRESH_MODE = 1
+RESOLUTION_RATIO = RESOLUTION[0] / RESOLUTION[1]
 
 
 #  ------------------------------  GLFW Functions
@@ -26,9 +27,6 @@ def initialize_glfw(resolution):
     glfw_check_terminate(glfw_window)
     # make the context current
     glfw.make_context_current(glfw_window)
-    # Disable V-Sync (vertical synchronization)
-    #glfw.swap_interval(choose_refresh_mode(REFRESH_MODE))
-
     return glfw_window
 
 
@@ -67,7 +65,7 @@ def display_fps_title(frame_count, delta_time, window_bar):
 
 def handle_events(frame_count, last_time, current_time, window_bar):
     delta_time = current_time - last_time
-    if delta_time >= 0.01:
+    if delta_time >= 0.016:
         fps = display_fps_title(frame_count, delta_time, window_bar)
         return 0, current_time, fps
     else:

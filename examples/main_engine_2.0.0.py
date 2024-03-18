@@ -35,7 +35,7 @@ ASPECT_RATIO = RESOLUTION[0] / RESOLUTION[1]
 NEAR_PROJ = 0.1
 FAR_PROJ = 1000
 SWAP_INTERVAL = 0
-PLAYER_SPEED = 0.05
+PLAYER_SPEED = 0.6
 
 
 GRID_DENSITY = 50
@@ -44,9 +44,9 @@ SURFACE_COLS = GRID_DENSITY
 GRID_ROWS = 2
 GRID_COLS = int(1e2)
 INSTANCE_AREA = GRID_ROWS * GRID_COLS
-GRID_SPACING = (2*pi) * 1.8
+GRID_SPACING = (2*pi) * 2
 
-DRAW_POLYS = 0
+DRAW_POLYS = 1
 
 last_x, last_y = RESOLUTION[0] / 2, RESOLUTION[1] / 2
 first_mouse = True
@@ -156,38 +156,11 @@ class ShaderManager:
 
 
 # ------------------------------ Mesh Functions --------------------------------------
-# Class to handle loaded objects
-class MeshLoader:
-    def __init__(self, filename):
-        self.vertices = []
-        self.indices = []
-        self.load_obj(filename)
-
-    def load_obj(self, filename):
-        with open(filename, 'r') as file:
-            for line in file:
-                if line.startswith('v '):  # Vertex position
-                    parts = line.split()
-                    self.vertices.extend([float(parts[1]), float(parts[2]), float(parts[3])])
-                elif line.startswith('f '):  # Face
-                    parts = line.split()
-                    # Assuming the OBJ file uses 1-based indexing
-                    idx = [int(p.split('/')[0]) - 1 for p in parts[1:]]
-                    self.indices.extend(idx)
-
-    def get_vertices(self):
-        return self.vertices
-
-    def get_indices(self):
-        return self.indices
-
-
 # Crete a class for generating the vertices, offsets, colors and indices for the sphere
 class ObjectManager:
-    def __init__(self, vertices, indices, normals, grid_rows, grid_cols, grid_spacing, base_color, shader_program):
+    def __init__(self, vertices, indices, grid_rows, grid_cols, grid_spacing, base_color, shader_program):
         self.vertices = vertices
         self.indices = indices
-        self.normals = normals
         self.indices_count = len(indices)
         self.instances_per_row = grid_rows
         self.instances_per_col = grid_cols
@@ -256,14 +229,6 @@ class ObjectManager:
         glVertexAttribDivisor(2, 1)
         self.vao = vao
 
-        if self.normals is not None:
-            # VBO for normals
-            normal_vbo = glGenBuffers(1)
-            glBindBuffer(GL_ARRAY_BUFFER, normal_vbo)
-            glBufferData(GL_ARRAY_BUFFER, self.normals.nbytes, self.normals, GL_STATIC_DRAW)
-            glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 0, None)  # Assuming location 3 for normals
-            glEnableVertexAttribArray(3)
-
 
     def delete_buffers(self):
         glDeleteVertexArrays(1, [self.vao])
@@ -271,7 +236,6 @@ class ObjectManager:
 
 def create_sphere_vertices(latitudes, longitudes):
     vertices = []
-    normals = []
     for i in range(latitudes + 1):
         theta = i * np.pi / latitudes
         sinTheta = np.sin(theta)
@@ -282,12 +246,10 @@ def create_sphere_vertices(latitudes, longitudes):
             sinPhi = np.sin(phi)
             cosPhi = np.cos(phi)
 
-            x = cosPhi * sinTheta * 5
+            x = cosPhi * sinTheta
             y = cosTheta
-            z = sinPhi * sinTheta * 3
+            z = sinPhi * sinTheta
             vertices.extend([x, y, z])
-
-            normals.extend([0.5, 1.0, 0.5])
 
     indices = []
     for i in range(latitudes):
@@ -297,7 +259,8 @@ def create_sphere_vertices(latitudes, longitudes):
 
             indices.extend([first, second, first + 1, second, second + 1, first + 1])
 
-    return np.array(vertices, dtype=np.float32), np.array(indices, dtype=np.uint32), np.array(normals, dtype=np.float32)
+    return np.array(vertices, dtype=np.float32), np.array(indices, dtype=np.uint32)
+
 
 
 # ---------------------------       MAIN CODE  -------------------------------------------------------------------
@@ -316,7 +279,7 @@ def main_game(gwindow):
 
     # Manage Shaders
     shaders_list = []
-    sphere_shader = ShaderManager("vertex_sph103.glsl", "fragment_sph103.glsl")
+    sphere_shader = ShaderManager("vertex_sph102.glsl", "fragment_sph102.glsl")
     shpere_program = sphere_shader.shader
     sphere_shader.load()
     #sphere_shader_2 = ShaderManager("vertex_sph102.glsl", "fragment_sph102.glsl")
@@ -328,14 +291,14 @@ def main_game(gwindow):
     # Create Objects
     objects_list = []
 
-    vertices_sph, indices_sph, normals_sph = create_sphere_vertices(SURFACE_ROWS, SURFACE_COLS)
-    instanced_spheres = ObjectManager(vertices_sph, indices_sph, normals_sph, GRID_ROWS, GRID_COLS,
-                                      GRID_SPACING, [1.0, 1.0, 1.0, 1.0], shpere_program)
+    vertices_sph, indices_sph = create_sphere_vertices(SURFACE_ROWS, SURFACE_COLS)
+    instanced_spheres = ObjectManager(vertices_sph, indices_sph, GRID_ROWS, GRID_COLS, GRID_SPACING,
+                                       [1.0, 0.0, 0.0, 1.0], shpere_program)
     instanced_spheres.create_buffers()
 
-    vertices_sph2, indices_sph2, normals_sph2 = create_sphere_vertices(SURFACE_ROWS, SURFACE_COLS)
-    instanced_spheres2 = ObjectManager(vertices_sph2, indices_sph2, normals_sph2, GRID_COLS, GRID_ROWS,
-                                       GRID_SPACING, [1.0, 0.0, 1.0, 1.0], shpere_program)
+    vertices_sph2, indices_sph2 = create_sphere_vertices(SURFACE_ROWS, SURFACE_COLS)
+    instanced_spheres2 = ObjectManager(vertices_sph2, indices_sph2, GRID_COLS, GRID_ROWS, GRID_SPACING,
+                                        [1.0, 0.0, 1.0, 1.0], shpere_program)
     instanced_spheres2.create_buffers()
 
     objects_list.extend([instanced_spheres])
@@ -346,9 +309,18 @@ def main_game(gwindow):
     # Get camera view matrix
     view = cam.get_view_matrix()
 
+    # Set up uniforms time projection and view
+
     for object in objects_list:
         glUniformMatrix4fv(object.uniform_locs['projection'], 1, GL_FALSE, projection)
         glUniformMatrix4fv(object.uniform_locs['view'], 1, GL_FALSE, view)
+
+    
+    #time_location = glGetUniformLocation(shpere_program, "time")
+    #proj_location = glGetUniformLocation(shpere_program, "projection")
+    #view_location = glGetUniformLocation(shpere_program, "view")
+    #glUniformMatrix4fv(proj_location, 1, GL_FALSE, projection)
+    #glUniformMatrix4fv(view_location, 1, GL_FALSE, view)
 
     running = True
     frame_count = 0
@@ -364,8 +336,10 @@ def main_game(gwindow):
 
         for i in range(len(objects_list)):
             glUniform1f(objects_list[i].uniform_locs['time'], start_time)
+            # Render objects
             glBindVertexArray(objects_list[i].vao)
             glDrawElementsInstanced(GL_TRIANGLES, objects_list[i].indices_count, GL_UNSIGNED_INT, None, INSTANCE_AREA)
+
 
         # Reset frame
         glfw.swap_buffers(gwindow)

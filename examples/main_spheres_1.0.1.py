@@ -33,17 +33,19 @@ ASPECT_RATIO = RESOLUTION[0] / RESOLUTION[1]
 
 
 NEAR_PROJ = 0.1
-FAR_PROJ = 1000
+FAR_PROJ = 10000
 SWAP_INTERVAL = 1
-PLAYER_SPEED = 0.05
+PLAYER_SPEED = 0.6
 
 
-SURFACE_ROWS = 80
-SURFACE_COLS = 80
+GRID_DENSITY = 10
+SURFACE_ROWS = GRID_DENSITY
+SURFACE_COLS = GRID_DENSITY
 GRID_ROWS = 1
-GRID_COLS = 1
-GRID_SPACING = 4*pi + 1
+GRID_COLS = int(1e3)
+GRID_SPACING = (pi*0.3)
 
+DRAW_POLYS = 0
 
 last_x, last_y = RESOLUTION[0] / 2, RESOLUTION[1] / 2
 first_mouse = True
@@ -118,53 +120,15 @@ def move_camera():
 
 #  ------------------------------  GLSL Functions ---------------------------------------------------------------------
 def vertex_shader():
-    vertex_src = """
-    #version 330
-    layout (location = 0) in vec3 position;
-    layout (location = 1) in vec3 offset;
-    layout (location = 2) in vec4 color;   
-    uniform mat4 view;
-    uniform mat4 projection;
-    uniform float time;
-    
-    
-    out vec4 vertexColor;
-   
-    void main()
-    {
-        vec3 pos = position;   
-        // Combining sine, cosine, and exponential functions for a chaotic ocean-like effect
-        float wave1 = sin(pos.x * 0.5 + time * 0.2) * 1.2;
-        float wave8 = sin(pos.z * 0.33 + time * 0.3) * 0.5;
-        float wave9 = sin(pos.z * 0.13 + time * 0.4) * 0.25;
-        float wave2 = sin(pos.x * 1.0 + time * 1.0) * 0.2;
-        float wave3 = cos(pos.z * 1.0 + time * 0.8) * 0.05;
-        float wave4 = sin(pos.x + pos.z) * 0.05;
-        float wave5 = cos(pos.x * time * 0.1 - 2 * sin(pos.z * time * 0.1) + time * 0.01) * 0.01;
-        float wave6 = sin(pos.z * time * 0.2 - 2 * cos(pos.x * time * 0.2) + time * 0.03) * 0.01;
-        float wave7 = sin(pos.x + time * 0.1) * cos(pos.z + time * 0.1) * 0.15;
-    
-        // Combining waves for a more complex and chaotic effect
-        pos.y = wave1 + wave2 + wave3 + wave4 + wave5 + wave7 + wave8 + wave9;
-    
-        gl_Position = projection * view * vec4(pos + offset, 1.0);
-        vertexColor = color;
-    }
-    """
-    return compileShader(vertex_src, GL_VERTEX_SHADER)
+    with open('./shaders/vertex_sph101.glsl', 'r') as file:
+            string_variable = file.read()
+    return compileShader(string_variable, GL_VERTEX_SHADER)
 
 
 def fragment_shader():
-    fragment_src = """
-    #version 330
-    in vec4 vertexColor;
-    out vec4 outColor;
-    void main()
-    {
-        outColor = vertexColor;
-    }
-    """
-    return compileShader(fragment_src, GL_FRAGMENT_SHADER)
+    with open('./shaders/fragment.glsl', 'r') as file:
+        string_variable = file.read()
+    return compileShader(string_variable, GL_FRAGMENT_SHADER)
 
 
 # ------------------------------ Mesh Functions --------------------------------------
@@ -173,54 +137,43 @@ def create_program():
     return shader
 
 
-def gen_grid_instanced(rows, cols, instances_per_row, instances_per_col, instance_spacing):
+def create_sphere_vertices(latitudes, longitudes):
     vertices = []
-    indices = []
-    num_instances = instances_per_row * instances_per_col
+    for i in range(latitudes + 1):
+        theta = i * np.pi / latitudes
+        sinTheta = np.sin(theta)
+        cosTheta = np.cos(theta)
 
-    # Constants for the range
-    x_start = -8 * np.pi
-    x_end = 8 * np.pi
-    z_start = -8 * np.pi
-    z_end = 8 * np.pi
+        for j in range(longitudes + 1):
+            phi = j * 2 * np.pi / longitudes
+            sinPhi = np.sin(phi)
+            cosPhi = np.cos(phi)
 
-    # Base grid vertices and indices generation
-    for i in range(rows + 1):
-        for j in range(cols + 1):
-            x = x_start + (j / cols) * (x_end - x_start)  # Adjust x to span from -2*pi to 2*pi
-            z = z_start + (i / rows) * (z_end - z_start)  # Adjust z to span from -2*pi to 2*pi
-            y = 0.0  # Flat grid on the XZ plane
+            x = cosPhi * sinTheta
+            y = cosTheta
+            z = sinPhi * sinTheta
             vertices.extend([x, y, z])
 
-    for i in range(rows):
-        for j in range(cols):
-            start = i * (cols + 1) + j
-            indices.extend([start, start + 1, start + cols + 1,
-                            start + 1, start + cols + 2, start + cols + 1])
+    indices = []
+    for i in range(latitudes):
+        for j in range(longitudes):
+            first = (i * (longitudes + 1)) + j
+            second = first + longitudes + 1
 
-    vertices = np.array(vertices, dtype=np.float32)
-    indices = np.array(indices, dtype=np.uint32)
+            indices.extend([first, second, first + 1, second, second + 1, first + 1])
 
-    # Adjusted Grid of grids offsets for symmetry
+    return np.array(vertices, dtype=np.float32), np.array(indices, dtype=np.uint32)
+
+
+def generate_offsets(instances_per_row, instances_per_col, spacing):
     offsets = []
-    offset_x_start = -(instances_per_col - 1) / 2 * instance_spacing
-    offset_z_start = -(instances_per_row - 1) / 2 * instance_spacing
     for i in range(instances_per_row):
         for j in range(instances_per_col):
-            offsetX = offset_x_start + j * instance_spacing
-            offsetY = 0.0  # Keep Y offset as 0 to stay on the XZ plane
-            offsetZ = offset_z_start + i * instance_spacing
-            offsets.append([offsetX, offsetY, offsetZ])
-
-    offsets = np.array(offsets, dtype=np.float32)
-
-    # Fixed colors for each instance
-    #colors = np.random.rand(num_instances, 4).astype(np.float32)  # RGBA
-    acolor = np.array([0.0, 0.8, 0.9, 1.0], dtype=np.float32)  # Cyan with full opacity
-    colors = np.tile(acolor, (num_instances, 1))
-
-    return vertices, indices, offsets, colors
-
+            x_offset = (i - instances_per_row / 2) * spacing
+            y_offset = 0  # Assuming you want them on the same plane, adjust as needed
+            z_offset = (j - instances_per_col / 2) * spacing
+            offsets.append([x_offset, y_offset, z_offset])
+    return np.array(offsets, dtype=np.float32)
 
 
 def create_buffers(vertices, indices, offsets, colors):
@@ -268,8 +221,9 @@ def main_game(gwindow):
     glfw.set_input_mode(gwindow, glfw.CURSOR, glfw.CURSOR_DISABLED)
     glfw.swap_interval(SWAP_INTERVAL)
     glEnable(GL_DEPTH_TEST)
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
-    glClearColor(0.3, 0.3, 0.3, 0.1)
+    if DRAW_POLYS == True:
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
+    glClearColor(0.0, 0.1, 0.2, 1.0)
 
     shader = create_program()
     glUseProgram(shader)
@@ -279,9 +233,9 @@ def main_game(gwindow):
     instances_per_col = GRID_COLS
     spacing = GRID_SPACING
     instances_area = instances_per_row * instances_per_col
-    vertices, indices, offsets, colors = gen_grid_instanced(rows, cols,
-                                                            instances_per_row, instances_per_col,
-                                                            spacing)
+    vertices, indices = create_sphere_vertices(rows, cols)
+    offsets = generate_offsets(instances_per_row, instances_per_col, spacing)
+    colors = np.random.rand(instances_area, 4).astype(np.float32)
 
     indices_count = len(indices)
     vao = create_buffers(vertices,indices, offsets, colors)
@@ -292,8 +246,8 @@ def main_game(gwindow):
     view = cam.get_view_matrix()
     view_location = glGetUniformLocation(shader, "view")
     glUniformMatrix4fv(view_location, 1, GL_FALSE, view)
-
     time_location = glGetUniformLocation(shader, "time")
+
 
     running = True
     frame_count = 0
@@ -303,8 +257,7 @@ def main_game(gwindow):
         start_time = glfw.get_time()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
-        glUniform1f(time_location, start_time * 2)
-
+        glUniform1f(time_location, start_time)
         move_camera()
         view = cam.get_view_matrix()
         glUniformMatrix4fv(view_location, 1, GL_FALSE, view)

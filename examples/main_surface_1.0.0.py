@@ -33,17 +33,19 @@ ASPECT_RATIO = RESOLUTION[0] / RESOLUTION[1]
 
 
 NEAR_PROJ = 0.1
-FAR_PROJ = 100
+FAR_PROJ = 1000
 SWAP_INTERVAL = 1
-PLAYER_SPEED = 0.01
+PLAYER_SPEED = 0.3
 
 
-SURFACE_ROWS = 300
-SURFACE_COLS = 100
-GRID_ROWS = 1
+GRID_DENSITY = 500
+SURFACE_ROWS = GRID_DENSITY
+SURFACE_COLS = 2 * GRID_DENSITY
+GRID_ROWS = 2
 GRID_COLS = 1
-GRID_SPACING = 1
+GRID_SPACING = (2*pi) * 5
 
+DRAW_POLYS = 0
 
 last_x, last_y = RESOLUTION[0] / 2, RESOLUTION[1] / 2
 first_mouse = True
@@ -118,53 +120,15 @@ def move_camera():
 
 #  ------------------------------  GLSL Functions ---------------------------------------------------------------------
 def vertex_shader():
-    vertex_src = """
-    #version 330
-    layout (location = 0) in vec3 position;
-    layout (location = 1) in vec3 offset;
-    layout (location = 2) in vec4 color;   
-    uniform mat4 view;
-    uniform mat4 projection;
-    uniform float time;
-    
-    
-    out vec4 vertexColor;
-   
-void main()
-{
-    vec3 pos = position;
-    // Base wave
-    float wave = sin(0.5 * (1 + pos.x) + 0.5 * cos((1 + pos.z) * time * 5)) * 0.01;
-    
-    // Iteratively add complexity based on time
-    int iterations = int(mod(time, 150.0)); // Change 10 to adjust how quickly new waves are added
-    for(int i = 1; i <= iterations; i++)
-    {
-        float frequency = float(i) * 0.2; // Adjust frequency scaling as desired
-        float phase = time * float(i); // Phase changes with time
-        wave += sin(pos.x * frequency + phase) * cos(pos.z * frequency + phase) * 0.005; // Adjust amplitude scaling as desired
-    }
-    
-    pos.y += wave;
-    
-    gl_Position = projection * view * vec4(pos + offset, 1.0);
-    vertexColor = color;
-    }
-    """
-    return compileShader(vertex_src, GL_VERTEX_SHADER)
+    with open('./shaders/vertex100.glsl', 'r') as file:
+            string_variable = file.read()
+    return compileShader(string_variable, GL_VERTEX_SHADER)
 
 
 def fragment_shader():
-    fragment_src = """
-    #version 330
-    in vec4 vertexColor;
-    out vec4 outColor;
-    void main()
-    {
-        outColor = vertexColor;
-    }
-    """
-    return compileShader(fragment_src, GL_FRAGMENT_SHADER)
+    with open('./shaders/fragment.glsl', 'r') as file:
+        string_variable = file.read()
+    return compileShader(string_variable, GL_FRAGMENT_SHADER)
 
 
 # ------------------------------ Mesh Functions --------------------------------------
@@ -178,11 +142,17 @@ def gen_grid_instanced(rows, cols, instances_per_row, instances_per_col, instanc
     indices = []
     num_instances = instances_per_row * instances_per_col
 
+    # Constants for the range
+    x_start = -8 * np.pi
+    x_end = 8 * np.pi
+    z_start = -8 * np.pi
+    z_end = 8 * np.pi
+
     # Base grid vertices and indices generation
     for i in range(rows + 1):
         for j in range(cols + 1):
-            x = (j / cols) - 0.5  # Centering the grid
-            z = (i / rows) - 0.5  # Centering the grid
+            x = x_start + (j / cols) * (x_end - x_start)  # Adjust x to span from -2*pi to 2*pi
+            z = z_start + (i / rows) * (z_end - z_start)  # Adjust z to span from -2*pi to 2*pi
             y = 0.0  # Flat grid on the XZ plane
             vertices.extend([x, y, z])
 
@@ -208,13 +178,12 @@ def gen_grid_instanced(rows, cols, instances_per_row, instances_per_col, instanc
 
     offsets = np.array(offsets, dtype=np.float32)
 
-    # Generate colors for each instance
-    colors = np.random.rand(num_instances, 4).astype(np.float32)  # RGBA
-    #acolor = np.array([0.0, 0.8, 0.9, 1.0], dtype=np.float32)
-    #colors = np.tile(acolor, (num_instances, 1))
+    # Fixed colors for each instance
+    #colors = np.random.rand(num_instances, 4).astype(np.float32)  # RGBA
+    acolor = np.array([0.0, 0.55, 0.6, 1.0], dtype=np.float32)  # Cyan with full opacity
+    colors = np.tile(acolor, (num_instances, 1))
 
     return vertices, indices, offsets, colors
-
 
 
 def create_buffers(vertices, indices, offsets, colors):
@@ -262,8 +231,9 @@ def main_game(gwindow):
     glfw.set_input_mode(gwindow, glfw.CURSOR, glfw.CURSOR_DISABLED)
     glfw.swap_interval(SWAP_INTERVAL)
     glEnable(GL_DEPTH_TEST)
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
-    glClearColor(0.3, 0.3, 0.3, 0.1)
+    if DRAW_POLYS == True:
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
+    glClearColor(0.5, 0.5, 0.5, 1.0)
 
     shader = create_program()
     glUseProgram(shader)
@@ -289,6 +259,8 @@ def main_game(gwindow):
 
     time_location = glGetUniformLocation(shader, "time")
 
+    playerPosLocation = glGetUniformLocation(shader, "playerPosition")
+
     running = True
     frame_count = 0
     zero_time = glfw.get_time()
@@ -297,11 +269,12 @@ def main_game(gwindow):
         start_time = glfw.get_time()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
-        glUniform1f(time_location, start_time)
-
+        glUniform1f(time_location, start_time * 10)
         move_camera()
         view = cam.get_view_matrix()
         glUniformMatrix4fv(view_location, 1, GL_FALSE, view)
+        print(cam.camera_pos[0], cam.camera_pos[1], cam.camera_pos[2])
+        glUniform3f(playerPosLocation, cam.camera_pos[0], cam.camera_pos[1], cam.camera_pos[2])
 
         glBindVertexArray(vao)
         glDrawElementsInstanced(GL_TRIANGLES, indices_count, GL_UNSIGNED_INT, None, instances_area)
@@ -313,15 +286,12 @@ def main_game(gwindow):
 
         if glfw.get_key(window, glfw.KEY_ESCAPE) == glfw.PRESS:
             glfw.terminate()
-            clear_frame(vao)
-            exit()
+            running = False
+ 
         frame_count += 1
-
-
 
     # Cleanup
     glfw.terminate()
-
 
 
 # Starting script
@@ -329,4 +299,5 @@ if __name__ == "__main__":
     start_t = time.time()
     window = initialize_glfw(RESOLUTION)
     main_game(window)
+    exit()
 
