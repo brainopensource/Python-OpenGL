@@ -90,8 +90,7 @@ class GameWindow:
         self.interval = interval
         self.polygons = poly_test
         glfw.swap_interval(self.interval)
-        glEnable(GL_DEPTH_TEST)  # GL_MULTISAMPLE, GL_BLEND
-
+        glEnable(GL_DEPTH_TEST)
         if self.polygons:
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
 
@@ -205,7 +204,7 @@ class ObjectManager:
             "time": glGetUniformLocation(self.shader_program, "time"),
             }
         return locations
-    
+
 
     def create_buffers(self):
         vao = glGenVertexArrays(1)
@@ -251,7 +250,7 @@ class ObjectManager:
 
 
 # Create a class to handle the creation of the geometries
-class GeometryManager:
+class GeometryGenerator:
     def __init__(self, rows, cols):
         self.grid_rows = rows
         self.grid_cols = cols
@@ -314,7 +313,7 @@ class GameMain:
 
     def create_objects(self):
         objects_list = []
-        geometries = GeometryManager(SURFACE_ROWS, SURFACE_COLS)
+        geometries = GeometryGenerator(SURFACE_ROWS, SURFACE_COLS)
         vertices_sph, indices_sph, normals_sph = geometries.create_sphere_vertices()
 
         instanced_spheres = ObjectManager(vertices_sph, indices_sph, normals_sph, GRID_ROWS, GRID_COLS,
@@ -361,87 +360,6 @@ class GameMain:
         [obj.delete_buffers() for obj in self.objects_list]
         glfw.terminate()
         self.running = False
-
-
-
-def main_game(gwindow):
-
-    # Setup controls class instance
-    controls = GameControls(gwindow, RESOLUTION[0], RESOLUTION[1], Camera(), PLAYER_SPEED)
-    game_manager = GameWindow(SWAP_INTERVAL, DRAW_POLYS)
-    game_manager.set_clear_color((0.0, 0.1, 0.2, 1.0))
-
-    # Manage Shaders
-    shaders_list = []
-    sphere_shader = ShaderManager("vertex_sph103.glsl", "fragment_sph103.glsl")
-    shpere_program = sphere_shader.shader
-    sphere_shader.load()
-    #sphere_shader_2 = ShaderManager("vertex_sph102.glsl", "fragment_sph102.glsl")
-    #shpere_program_2 = sphere_shader.shader
-    #sphere_shader_2.load()
-    shaders_list.extend([sphere_shader])
-
-
-    # Create Objects
-    objects_list = []
-
-    geometries = GeometryManager(SURFACE_ROWS, SURFACE_COLS)
-    vertices_sph, indices_sph, normals_sph = geometries.create_sphere_vertices()
-    instanced_spheres = ObjectManager(vertices_sph, indices_sph, normals_sph, GRID_ROWS, GRID_COLS,
-                                      GRID_SPACING, [1.0, 1.0, 1.0, 1.0], shpere_program)
-    instanced_spheres.create_buffers()
-
-    vertices_sph2, indices_sph2, normals_sph2 = geometries.create_sphere_vertices()
-    instanced_spheres2 = ObjectManager(vertices_sph2, indices_sph2, normals_sph2, GRID_COLS, GRID_ROWS,
-                                       GRID_SPACING, [1.0, 0.0, 1.0, 1.0], shpere_program)
-    instanced_spheres2.create_buffers()
-
-    objects_list.extend([instanced_spheres])
-    objects_list.extend([instanced_spheres2])
-
-    # Set up projection matrix
-    projection = matrix44.create_perspective_projection_matrix(60.0, RESOLUTION_RATIO, NEAR_PROJ, FAR_PROJ)
-    # Get camera view matrix
-    view = controls.get_view()
-
-    for object in objects_list:
-        glUniformMatrix4fv(object.uniform_locs['projection'], 1, GL_FALSE, projection)
-        glUniformMatrix4fv(object.uniform_locs['view'], 1, GL_FALSE, view)
-
-    running = True
-    frame_count = 0
-    zero_time = glfw.get_time()
-
-    while running:
-
-        start_time = glfw.get_time()
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-        controls.move_camera()
-        view = controls.get_view()
-        glUniformMatrix4fv(objects_list[0].uniform_locs['view'], 1, GL_FALSE, view)
-
-        for i in range(len(objects_list)):
-            glUniform1f(objects_list[i].uniform_locs['time'], start_time)
-            glBindVertexArray(objects_list[i].vao)
-            glDrawElementsInstanced(GL_TRIANGLES, objects_list[i].indices_count, GL_UNSIGNED_INT, None, INSTANCE_AREA)
-
-        # Reset frame
-        glfw.swap_buffers(gwindow)
-        frame_count, zero_time, fps = handle_events(frame_count, zero_time, start_time, gwindow)
-        glfw.poll_events()
-
-        if glfw.get_key(gwindow, glfw.KEY_ESCAPE) == glfw.PRESS:
-            [shader.delete() for shader in shaders_list]
-            [object.delete_buffers() for object in objects_list]
-            glfw.terminate()
-            running = False
-
-        frame_count += 1
-
-    # Cleanup
-    glfw.terminate()
-
-
 
 
 # Starting script
