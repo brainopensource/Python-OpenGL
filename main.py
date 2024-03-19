@@ -1,13 +1,9 @@
-import ctypes
-from math import sin, pi
+from math import sin, cos, pi
 from pyrr import Vector3, matrix44
 import random
 from sys import exit
-#from utils import *
-from numba import jit, prange, uint, float32
-#import glfw
+from utils import *
 from glfw_initialize2 import *
-from math import sin, cos
 import numpy as np
 from OpenGL.GL import (
     glClear, glClearColor, glEnableClientState, glLoadIdentity,
@@ -25,98 +21,83 @@ import pyrr
 from camera import Camera
 
 
-# ------------------------------- GLOBAL VARIABLES --------------------------------------------------------------------
-
-WHITE_COLOR = (1.0, 1.0, 1.0)
-BLACK_COLOR = (0.0, 0.0, 0.0)
-ASPECT_RATIO = RESOLUTION[0] / RESOLUTION[1]
-
-
-NEAR_PROJ = 0.1
-FAR_PROJ = 1000
-SWAP_INTERVAL = 0
-PLAYER_SPEED = 0.05
-
-
-GRID_DENSITY = 50
-SURFACE_ROWS = GRID_DENSITY
-SURFACE_COLS = GRID_DENSITY
-GRID_ROWS = 2
-GRID_COLS = int(1e2)
-INSTANCE_AREA = GRID_ROWS * GRID_COLS
-GRID_SPACING = (2*pi) * 1.8
-
-DRAW_POLYS = 0
-
-last_x, last_y = RESOLUTION[0] / 2, RESOLUTION[1] / 2
-first_mouse = True
-left, right, forward, backward, up, down = False, False, False, False, False, False
-
-
-cam = Camera()
-
-
 # ------------------------------ Game Controls -------------------------------------------------------------------
-def mouse_look_callback(window, x, y):
-    global first_mouse, last_x, last_y
-    if first_mouse:
-        last_x = -x
-        last_y = y
-        first_mouse = False
+# Create a class to handle game controls
+class GameControls:
+    def __init__(self, gamewindow, width, height, GameCamera, player_speed):
+        self.camera = GameCamera
+        self.left = self.right = self.forward = self.backward = self.up = self.down = False
+        self.player_speed = player_speed
+        self.last_x = width * 0.5
+        self.last_y = height * 0.5
+        self.window = gamewindow
+        glfw.set_cursor_pos_callback(gamewindow, self.mouse_look_callback)
+        glfw.set_key_callback(gamewindow, self.keyboard_callback)
+        glfw.set_input_mode(gamewindow, glfw.CURSOR, glfw.CURSOR_DISABLED)
 
-    delta_x = (x - last_x) / 2
-    delta_y = (last_y - y) / 3
+    def mouse_look_callback(self, window, x, y):
+        self.camera.process_mouse_movements((x - self.last_x) / 2, (self.last_y - y) / 2)
+        self.last_x = x
+        self.last_y = y
 
-    last_x = x
-    last_y = y
+    def get_view(self):
+        return self.camera.get_view_matrix()
 
-    cam.process_mouse_movements(delta_x, delta_y)
+    def move_camera(self):
+        if self.left:
+            self.camera.process_keyboard("LEFT", self.player_speed)
+        if self.right:
+            self.camera.process_keyboard("RIGHT", self.player_speed)
+        if self.forward:
+            self.camera.process_keyboard("FORWARD", self.player_speed)
+        if self.backward:
+            self.camera.process_keyboard("BACKWARD", self.player_speed)
+        if self.up:
+            self.camera.process_keyboard("UP", self.player_speed)
+        if self.down:
+            self.camera.process_keyboard("DOWN", self.player_speed)
 
-    return
+    def keyboard_callback(self, window, key, scancode, action, mode):
+        if key == glfw.KEY_W and action == glfw.PRESS:
+            self.forward = True
+        elif key == glfw.KEY_W and action == glfw.RELEASE:
+            self.forward = False
+        if key == glfw.KEY_S and action == glfw.PRESS:
+            self.backward = True
+        elif key == glfw.KEY_S and action == glfw.RELEASE:
+            self.backward = False
+        if key == glfw.KEY_A and action == glfw.PRESS:
+            self.left = True
+        elif key == glfw.KEY_A and action == glfw.RELEASE:
+            self.left = False
+        if key == glfw.KEY_D and action == glfw.PRESS:
+            self.right = True
+        elif key == glfw.KEY_D and action == glfw.RELEASE:
+            self.right = False
+        if key == glfw.KEY_Q and action == glfw.PRESS:
+            self.up = True
+        elif key == glfw.KEY_Q and action == glfw.RELEASE:
+            self.up = False
+        if key == glfw.KEY_E and action == glfw.PRESS:
+            self.down = True
+        elif key == glfw.KEY_E and action == glfw.RELEASE:
+            self.down = False
 
 
-def keyboard_callback(window, key, scancode, action, mode):
-    global left, right, forward, backward, up, down
+#Create a class to make the first configurations in glfw
+class GameWindow:
+    def __init__(self, interval, poly_test):
+        self.interval = interval
+        self.polygons = poly_test
+        glfw.swap_interval(self.interval)
+        glEnable(GL_DEPTH_TEST)  # GL_MULTISAMPLE, GL_BLEND
 
-    if key == glfw.KEY_W and action == glfw.PRESS:
-        forward = True
-    elif key == glfw.KEY_W and action == glfw.RELEASE:
-        forward = False
-    if key == glfw.KEY_S and action == glfw.PRESS:
-        backward = True
-    elif key == glfw.KEY_S and action == glfw.RELEASE:
-        backward = False
-    if key == glfw.KEY_A and action == glfw.PRESS:
-        left = True
-    elif key == glfw.KEY_A and action == glfw.RELEASE:
-        left = False
-    if key == glfw.KEY_D and action == glfw.PRESS:
-        right = True
-    elif key == glfw.KEY_D and action == glfw.RELEASE:
-        right = False
-    if key == glfw.KEY_Q and action == glfw.PRESS:
-        up = True
-    elif key == glfw.KEY_Q and action == glfw.RELEASE:
-        up = False
-    if key == glfw.KEY_E and action == glfw.PRESS:
-        down = True
-    elif key == glfw.KEY_E and action == glfw.RELEASE:
-        down = False
+        if self.polygons:
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
 
-
-def move_camera():
-    if left:
-        cam.process_keyboard("LEFT", PLAYER_SPEED)
-    if right:
-        cam.process_keyboard("RIGHT", PLAYER_SPEED)
-    if forward:
-        cam.process_keyboard("FORWARD", PLAYER_SPEED)
-    if backward:
-        cam.process_keyboard("BACKWARD", PLAYER_SPEED)
-    if up:
-        cam.process_keyboard("UP", PLAYER_SPEED)
-    if down:
-        cam.process_keyboard("DOWN", PLAYER_SPEED)
+    @staticmethod
+    def set_clear_color(color):
+        glClearColor(color[0], color[1], color[2], color[3])
 
 
 #  ------------------------------  GLSL Functions ---------------------------------------------------------------------
@@ -156,7 +137,7 @@ class ShaderManager:
 
 
 # ------------------------------ Mesh Functions --------------------------------------
-# Class to handle loaded objects
+# Class to handle loaded objects from Blender
 class MeshLoader:
     def __init__(self, filename):
         self.vertices = []
@@ -269,50 +250,126 @@ class ObjectManager:
         glDeleteVertexArrays(1, [self.vao])
 
 
-def create_sphere_vertices(latitudes, longitudes):
-    vertices = []
-    normals = []
-    for i in range(latitudes + 1):
-        theta = i * np.pi / latitudes
-        sinTheta = np.sin(theta)
-        cosTheta = np.cos(theta)
+# Create a class to handle the creation of the geometries
+class GeometryManager:
+    def __init__(self, rows, cols):
+        self.grid_rows = rows
+        self.grid_cols = cols
 
-        for j in range(longitudes + 1):
-            phi = j * 2 * np.pi / longitudes
-            sinPhi = np.sin(phi)
-            cosPhi = np.cos(phi)
+    def create_sphere_vertices(self):
+        vertices = []
+        normals = []
+        for i in range(self.grid_rows + 1):
+            theta = i * np.pi / self.grid_rows
+            sinTheta = sin(theta)
+            cosTheta = cos(theta)
+            for j in range(self.grid_cols + 1):
+                phi = j * 2 * np.pi / self.grid_cols
+                sinPhi = sin(phi)
+                cosPhi = cos(phi)
+                x = cosPhi * sinTheta * 5
+                y = cosTheta
+                z = sinPhi * sinTheta * 3
+                vertices.extend([x, y, z])
+                normals.extend([0.5, 1.0, 0.5])
 
-            x = cosPhi * sinTheta * 5
-            y = cosTheta
-            z = sinPhi * sinTheta * 3
-            vertices.extend([x, y, z])
+        indices = []
+        for i in range(self.grid_rows):
+            for j in range(self.grid_cols):
+                first = (i * (self.grid_cols + 1)) + j
+                second = first + self.grid_cols + 1
 
-            normals.extend([0.5, 1.0, 0.5])
+                indices.extend([first, second, first + 1, second, second + 1, first + 1])
 
-    indices = []
-    for i in range(latitudes):
-        for j in range(longitudes):
-            first = (i * (longitudes + 1)) + j
-            second = first + longitudes + 1
-
-            indices.extend([first, second, first + 1, second, second + 1, first + 1])
-
-    return np.array(vertices, dtype=np.float32), np.array(indices, dtype=np.uint32), np.array(normals, dtype=np.float32)
+        return np.array(vertices, dtype=np.float32), np.array(indices, dtype=np.uint32), np.array(normals, dtype=np.float32)
 
 
 # ---------------------------       MAIN CODE  -------------------------------------------------------------------
+# Transforming your main_game function into a clas, enhances modularity, improves code organization, makes your game more scalable, and simplifies maintenance and debugging. By encapsulating game-related functionality within a class, you can also more easily manage game state, share common resources, and extend game features.
+class GameMain:
+    def __init__(self):
+        self.window = initialize_glfw(RESOLUTION)
+        self.controls = GameControls(self.window, RESOLUTION[0], RESOLUTION[1], Camera(), PLAYER_SPEED)
+        self.game_manager = GameWindow(SWAP_INTERVAL, DRAW_POLYS)
+        self.game_manager.set_clear_color((0.0, 0.1, 0.2, 1.0))
+
+        self.shaders_list = self.setup_shaders("vertex_sph103.glsl", "fragment_sph103.glsl")
+        self.objects_list = self.create_objects()
+
+        self.projection = matrix44.create_perspective_projection_matrix(60.0, RESOLUTION_RATIO, NEAR_PROJ, FAR_PROJ)
+        self.view = self.controls.get_view()
+        self.setup_uniforms()
+
+        self.running = True
+        self.frame_count = 0
+        self.zero_time = glfw.get_time()
+
+
+    def setup_shaders(self, vertex, fragment):
+        shaders_list = []
+        sphere_shader = ShaderManager(vertex, fragment)
+        sphere_shader.load()
+        shaders_list.append(sphere_shader)
+        return shaders_list
+
+    def create_objects(self):
+        objects_list = []
+        geometries = GeometryManager(SURFACE_ROWS, SURFACE_COLS)
+        vertices_sph, indices_sph, normals_sph = geometries.create_sphere_vertices()
+
+        instanced_spheres = ObjectManager(vertices_sph, indices_sph, normals_sph, GRID_ROWS, GRID_COLS,
+                                          GRID_SPACING, [1.0, 1.0, 1.0, 1.0], self.shaders_list[0].shader)
+        instanced_spheres.create_buffers()
+
+        vertices_sph2, indices_sph2, normals_sph2 = geometries.create_sphere_vertices()
+        instanced_spheres2 = ObjectManager(vertices_sph2, indices_sph2, normals_sph2, GRID_COLS, GRID_ROWS,
+                                           GRID_SPACING, [1.0, 1.0, 1.0, 1.0], self.shaders_list[0].shader)
+        instanced_spheres2.create_buffers()
+
+        objects_list.extend([instanced_spheres, instanced_spheres2])
+        return objects_list
+
+    def setup_uniforms(self):
+        for obj in self.objects_list:
+            glUniformMatrix4fv(obj.uniform_locs['projection'], 1, GL_FALSE, self.projection)
+            glUniformMatrix4fv(obj.uniform_locs['view'], 1, GL_FALSE, self.view)
+
+    def run(self):
+        while self.running:
+            start_time = glfw.get_time()
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+            self.controls.move_camera()
+            self.view = self.controls.get_view()
+            glUniformMatrix4fv(self.objects_list[0].uniform_locs['view'], 1, GL_FALSE, self.view)
+
+            for obj in self.objects_list:
+                glUniform1f(obj.uniform_locs['time'], start_time)
+                glBindVertexArray(obj.vao)
+                glDrawElementsInstanced(GL_TRIANGLES, obj.indices_count, GL_UNSIGNED_INT, None, INSTANCE_AREA)
+
+            glfw.swap_buffers(self.window)
+            self.frame_count, self.zero_time, fps = handle_events(self.frame_count, self.zero_time, start_time, self.window)
+            glfw.poll_events()
+
+            if glfw.get_key(self.window, glfw.KEY_ESCAPE) == glfw.PRESS:
+                self.terminate()
+
+            self.frame_count += 1
+
+    def terminate(self):
+        [shader.delete() for shader in self.shaders_list]
+        [obj.delete_buffers() for obj in self.objects_list]
+        glfw.terminate()
+        self.running = False
+
+
+
 def main_game(gwindow):
 
-    glfw.set_cursor_pos_callback(gwindow, mouse_look_callback)
-    glfw.set_key_callback(gwindow, keyboard_callback)
-    glfw.set_input_mode(gwindow, glfw.CURSOR, glfw.CURSOR_DISABLED)
-    glfw.swap_interval(SWAP_INTERVAL)
-    glEnable(GL_DEPTH_TEST)  # GL_MULTISAMPLE, GL_BLEND
-    #glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-
-    if DRAW_POLYS == True:
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
-    glClearColor(0.0, 0.1, 0.2, 1.0)
+    # Setup controls class instance
+    controls = GameControls(gwindow, RESOLUTION[0], RESOLUTION[1], Camera(), PLAYER_SPEED)
+    game_manager = GameWindow(SWAP_INTERVAL, DRAW_POLYS)
+    game_manager.set_clear_color((0.0, 0.1, 0.2, 1.0))
 
     # Manage Shaders
     shaders_list = []
@@ -328,12 +385,13 @@ def main_game(gwindow):
     # Create Objects
     objects_list = []
 
-    vertices_sph, indices_sph, normals_sph = create_sphere_vertices(SURFACE_ROWS, SURFACE_COLS)
+    geometries = GeometryManager(SURFACE_ROWS, SURFACE_COLS)
+    vertices_sph, indices_sph, normals_sph = geometries.create_sphere_vertices()
     instanced_spheres = ObjectManager(vertices_sph, indices_sph, normals_sph, GRID_ROWS, GRID_COLS,
                                       GRID_SPACING, [1.0, 1.0, 1.0, 1.0], shpere_program)
     instanced_spheres.create_buffers()
 
-    vertices_sph2, indices_sph2, normals_sph2 = create_sphere_vertices(SURFACE_ROWS, SURFACE_COLS)
+    vertices_sph2, indices_sph2, normals_sph2 = geometries.create_sphere_vertices()
     instanced_spheres2 = ObjectManager(vertices_sph2, indices_sph2, normals_sph2, GRID_COLS, GRID_ROWS,
                                        GRID_SPACING, [1.0, 0.0, 1.0, 1.0], shpere_program)
     instanced_spheres2.create_buffers()
@@ -344,7 +402,7 @@ def main_game(gwindow):
     # Set up projection matrix
     projection = matrix44.create_perspective_projection_matrix(60.0, RESOLUTION_RATIO, NEAR_PROJ, FAR_PROJ)
     # Get camera view matrix
-    view = cam.get_view_matrix()
+    view = controls.get_view()
 
     for object in objects_list:
         glUniformMatrix4fv(object.uniform_locs['projection'], 1, GL_FALSE, projection)
@@ -358,8 +416,8 @@ def main_game(gwindow):
 
         start_time = glfw.get_time()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-        move_camera()
-        view = cam.get_view_matrix()
+        controls.move_camera()
+        view = controls.get_view()
         glUniformMatrix4fv(objects_list[0].uniform_locs['view'], 1, GL_FALSE, view)
 
         for i in range(len(objects_list)):
@@ -372,22 +430,25 @@ def main_game(gwindow):
         frame_count, zero_time, fps = handle_events(frame_count, zero_time, start_time, gwindow)
         glfw.poll_events()
 
-        if glfw.get_key(window, glfw.KEY_ESCAPE) == glfw.PRESS:
+        if glfw.get_key(gwindow, glfw.KEY_ESCAPE) == glfw.PRESS:
             [shader.delete() for shader in shaders_list]
             [object.delete_buffers() for object in objects_list]
             glfw.terminate()
             running = False
- 
+
         frame_count += 1
 
     # Cleanup
     glfw.terminate()
 
 
+
+
 # Starting script
 if __name__ == "__main__":
-    start_t = time.time()
-    window = initialize_glfw(RESOLUTION)
-    main_game(window)
+    #start_t = time.time()
+    game = GameMain()
+    game.run()
+    #main_game(window)
     exit()
 

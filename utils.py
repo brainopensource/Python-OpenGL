@@ -1,4 +1,36 @@
 import time
+from glfw_initialize2 import *
+from math import pi
+
+
+# ------------ Config Variables
+WHITE_COLOR = (1.0, 1.0, 1.0)
+BLACK_COLOR = (0.0, 0.0, 0.0)
+
+
+NEAR_PROJ = 0.1
+FAR_PROJ = 1000
+SWAP_INTERVAL = 0
+PLAYER_SPEED = 0.05
+
+
+GRID_DENSITY = 50
+SURFACE_ROWS = GRID_DENSITY
+SURFACE_COLS = GRID_DENSITY
+GRID_ROWS = 2
+GRID_COLS = int(1e2)
+INSTANCE_AREA = GRID_ROWS * GRID_COLS
+GRID_SPACING = (2*pi) * 1.8
+
+DRAW_POLYS = 1
+
+last_x, last_y = RESOLUTION[0] / 2, RESOLUTION[1] / 2
+first_mouse = True
+left, right, forward, backward, up, down = False, False, False, False, False, False
+
+
+
+
 
 
 def time_record(func):
@@ -9,4 +41,3 @@ def time_record(func):
         print(f"{func.__name__}: {round(end_time - start_time, 2)} s. ")
         return result
     return wrapper
-

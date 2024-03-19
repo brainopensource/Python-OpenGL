@@ -18,13 +18,13 @@ class Camera:
         return matrix44.create_look_at(self.camera_pos, self.camera_pos + self.camera_front, self.camera_up)
 
 
-    def process_mouse_movements(self, x, y, lock_pitch=False):
+    def process_mouse_movements(self, x, y):
         x *= self.mouse_sense
         y *= self.mouse_sense
         self.yaw += x
         self.pitch += y
-        if lock_pitch:
-            self.pitch = max(min(self.pitch, 90), -90)
+        #if lock_pitch:
+        #    self.pitch = max(min(self.pitch, 90), -90)
         self.update_camera_vectors()
 
 

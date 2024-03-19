@@ -6,7 +6,7 @@ from sys import exit
 #from utils import *
 from numba import jit, prange, uint, float32
 #import glfw
-from glfw_initialize2 import *
+from ..glfw_initialize2 import *
 from math import sin, cos
 import numpy as np
 from OpenGL.GL import (
@@ -22,7 +22,7 @@ from OpenGL.GL import (
     )
 from OpenGL.GL.shaders import compileProgram, compileShader
 import pyrr
-from camera import Camera
+from ..camera import Camera
 
 
 # ------------------------------- GLOBAL VARIABLES --------------------------------------------------------------------
