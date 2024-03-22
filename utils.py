@@ -24,6 +24,7 @@ GRID_SPACING = (2*pi) * 1.8
 
 DRAW_POLYS = 1
 
+RESOLUTION = [1420, 800]
 last_x, last_y = RESOLUTION[0] / 2, RESOLUTION[1] / 2
 first_mouse = True
 left, right, forward, backward, up, down = False, False, False, False, False, False
